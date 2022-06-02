@@ -80,12 +80,19 @@ class GetTokenCommand(BasicCommand):
             'help_text': (
                 "Specify the name of the Amazon EKS cluster to create a token for."
             ),
-            'required': True,
+            'required': False,
         },
         {
             'name': 'role-arn',
             'help_text': (
                 "Assume this role for credentials when signing the token."
+            ),
+            'required': False,
+        },
+        {
+            'name': 'id',
+            'help_text': (
+                "Specify the id of the Amazon EKS cluster to create a token for."
             ),
             'required': False,
         },
@@ -102,7 +109,15 @@ class GetTokenCommand(BasicCommand):
         sts_client = client_factory.get_sts_client(
             region_name=parsed_globals.region, role_arn=parsed_args.role_arn
         )
-        token = TokenGenerator(sts_client).get_token(parsed_args.cluster_name)
+        
+        if parsed_args.cluster_name is not None:
+            if parsed_args.id is not None:
+                return ValueError("Arguments --cluster-name and --id are mutually exclusive.")
+            token = TokenGenerator(sts_client).get_token(parsed_args.cluster_name)
+        elif parsed_args.id is not None:
+            token = TokenGenerator(sts_client).get_token(parsed_args.id)
+        else:
+            return ValueError("Either parameter --cluster-name or --id must be specified.")
 
         # By default STS signs the url for 15 minutes so we are creating a
         # rfc3339 timestamp with expiration in 14 minutes as part of the token, which

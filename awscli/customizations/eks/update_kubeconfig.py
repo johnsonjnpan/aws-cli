@@ -52,7 +52,16 @@ class UpdateKubeconfigCommand(BasicCommand):
                           "This cluster must exist in your account and in the "
                           "specified or configured default Region "
                           "for your AWS CLI installation."),
-            'required': True
+            'required': False
+        },
+        {
+            'name': 'id',
+            'help_text': ("The id of the cluster for which "
+                          "to create a kubeconfig entry. "
+                          "This cluster must exist in your account and in the "
+                          "specified or configured default Region "
+                          "for your AWS CLI installation."),
+            'required': False
         },
         {
             'name': 'kubeconfig',
@@ -288,8 +297,17 @@ class EKSClient(object):
         Return a user entry generated using
         the previously obtained description.
         """
+        clusterDescription = self._get_cluster_description()
+        region = clusterDescription.get("arn").split(":")[3]
+        outpostConfig = clusterDescription.get("outpostConfig")
 
-        region = self._get_cluster_description().get("arn").split(":")[3]
+        if outpostConfig is None:
+            clusterIdentificationParameter = "--cluster-name"
+            clusterIdentificationValue = self._cluster_name
+        else:
+            # If cluster contains outpostConfig, use id for identification
+            clusterIdentificationParameter = "--id"
+            clusterIdentificationValue = clusterDescription.get("id")
 
         generated_user = OrderedDict([
             ("name", self._get_cluster_description().get("arn", "")),
@@ -302,8 +320,8 @@ class EKSClient(object):
                             region,
                             "eks",
                             "get-token",
-                            "--cluster-name",
-                            self._cluster_name,
+                            clusterIdentificationParameter,
+                            clusterIdentificationValue,
                         ]),
                     ("command", "aws"),
                 ]))
