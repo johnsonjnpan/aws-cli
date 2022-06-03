@@ -62,7 +62,7 @@ TOKEN_EXPIRATION_MINS = 14
 
 TOKEN_PREFIX = 'k8s-aws-v1.'
 
-CLUSTER_NAME_HEADER = 'x-k8s-aws-id'
+K8S_AWS_ID_HEADER = 'x-k8s-aws-id'
 
 
 class GetTokenCommand(BasicCommand):
@@ -204,18 +204,18 @@ class TokenGenerator(object):
     def __init__(self, sts_client):
         self._sts_client = sts_client
 
-    def get_token(self, cluster_name):
+    def get_token(self, k8s_aws_id):
         """Generate a presigned url token to pass to kubectl."""
-        url = self._get_presigned_url(cluster_name)
+        url = self._get_presigned_url(k8s_aws_id)
         token = TOKEN_PREFIX + base64.urlsafe_b64encode(
             url.encode('utf-8')
         ).decode('utf-8').rstrip('=')
         return token
 
-    def _get_presigned_url(self, cluster_name):
+    def _get_presigned_url(self, k8s_aws_id):
         return self._sts_client.generate_presigned_url(
             'get_caller_identity',
-            Params={'ClusterName': cluster_name},
+            Params={K8S_AWS_ID_HEADER: k8s_aws_id},
             ExpiresIn=URL_TIMEOUT,
             HttpMethod='GET',
         )
@@ -233,7 +233,7 @@ class STSClientFactory(object):
             client_kwargs['aws_secret_access_key'] = creds['SecretAccessKey']
             client_kwargs['aws_session_token'] = creds['SessionToken']
         sts = self._session.create_client('sts', **client_kwargs)
-        self._register_cluster_name_handlers(sts)
+        self._register_k8s_aws_id_handlers(sts)
         return sts
 
     def _get_role_credentials(self, region_name, role_arn):
@@ -242,22 +242,20 @@ class STSClientFactory(object):
             RoleArn=role_arn, RoleSessionName='EKSGetTokenAuth'
         )['Credentials']
 
-    def _register_cluster_name_handlers(self, sts_client):
+    def _register_k8s_aws_id_handlers(self, sts_client):
         sts_client.meta.events.register(
             'provide-client-params.sts.GetCallerIdentity',
-            self._retrieve_cluster_name,
+            self._retrieve_k8s_aws_id,
         )
         sts_client.meta.events.register(
             'before-sign.sts.GetCallerIdentity',
-            self._inject_cluster_name_header,
+            self._inject_k8s_aws_id_header,
         )
 
-    def _retrieve_cluster_name(self, params, context, **kwargs):
-        if 'ClusterName' in params:
-            context['eks_cluster'] = params.pop('ClusterName')
+    def _retrieve_k8s_aws_id(self, params, context, **kwargs):
+        if K8S_AWS_ID_HEADER in params:
+            context[K8S_AWS_ID_HEADER] = params.pop(K8S_AWS_ID_HEADER)
 
-    def _inject_cluster_name_header(self, request, **kwargs):
-        if 'eks_cluster' in request.context:
-            request.headers[CLUSTER_NAME_HEADER] = request.context[
-                'eks_cluster'
-            ]
+    def _inject_k8s_aws_id_header(self, request, **kwargs):
+        if K8S_AWS_ID_HEADER in request.context:
+            request.headers[K8S_AWS_ID_HEADER] = request.context[K8S_AWS_ID_HEADER]
